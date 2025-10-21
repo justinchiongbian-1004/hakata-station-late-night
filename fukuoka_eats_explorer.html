@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fukuoka Late Night Eats Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght400;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Amber Neutrals -->
+    <!-- Application Structure Plan: A dashboard-style SPA. Key interactions are hotel selection (dropdown) and cuisine filtering (checkboxes). These controls dynamically update a list of interactive restaurant cards and a horizontal bar chart visualizing walking times. This structure was chosen to allow users to quickly narrow down options based on their most important criteria (location and food preference) and visually compare distances. -->
+    <!-- Visualization & Content Choices: 1. Restaurant Data -> Goal: Inform -> Method: HTML/Tailwind Cards -> Interaction: Filtered by controls. Justification: Cards are more modular and mobile-friendly than a large table. 2. Proximity -> Goal: Compare -> Method: Chart.js Horizontal Bar Chart -> Interaction: Updates with hotel selection. Justification: Provides an immediate visual comparison of walking distances, which is a key user need. Library: Chart.js (Canvas). 3. Filters -> Goal: Organize/Filter -> Method: HTML Dropdown and Checkboxes -> Interaction: Triggers JS updates. Justification: Standard, intuitive UI controls for filtering data. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #FFFBEB; /* Amber 50 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 400px;
+            max-height: 50vh;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 500px;
+            }
+        }
+    </style>
+</head>
+<body class="text-amber-900">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-amber-800">Fukuoka Late Night Eats Explorer</h1>
+            <p class="mt-2 text-lg text-amber-700">Find the best late-night food near your hotel in Hakata.</p>
+        </header>
+
+        <main>
+            <!-- Controls Section -->
+            <div class="bg-white/60 backdrop-blur-sm rounded-xl shadow-md p-4 md:p-6 mb-8 sticky top-4 z-10">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                    <div class="md:col-span-1">
+                        <label for="hotel-select" class="block text-sm font-medium text-amber-800 mb-1">Select Your Hotel:</label>
+                        <select id="hotel-select" class="w-full rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
+                            <option value="tokyu" selected>Tokyu Rei</option>
+                            <option value="prezio">Shitetsu Prezio</option>
+                            <option value="hokke">Hokke Club</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-amber-800 mb-2">Filter by Cuisine:</label>
+                        <div id="cuisine-filters" class="flex flex-wrap gap-x-4 gap-y-2">
+                            <!-- Cuisine checkboxes will be injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Section -->
+            <section class="mb-12">
+                <h2 class="text-2xl font-bold text-center mb-4">Walking Time from Your Hotel</h2>
+                 <p class="text-center text-amber-700 max-w-2xl mx-auto mb-6">
+                    This chart shows the estimated walking time in minutes from your selected hotel to each restaurant. Use this to quickly see which desirable spots are closest to you for a late-night meal.
+                </p>
+                <div class="bg-white p-4 rounded-xl shadow-lg">
+                    <div class="chart-container">
+                        <canvas id="proximityChart"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Restaurant List Section -->
+            <section>
+                 <h2 class="text-2xl font-bold text-center mb-4">Restaurant Details</h2>
+                 <p class="text-center text-amber-700 max-w-2xl mx-auto mb-8">
+                    Below are the restaurants matching your filters. Each card provides key details including the address, Sunday closing times, and a direct link to the location on Google Maps. The walking time shown is specific to the hotel you've selected above.
+                </p>
+                <div id="restaurant-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Restaurant cards will be injected here -->
+                </div>
+                 <div id="no-results" class="text-center py-12 hidden">
+                    <p class="text-xl font-semibold text-amber-700">No restaurants match your selected filters.</p>
+                    <p class="text-amber-600 mt-2">Try selecting different cuisine types or clearing the filters.</p>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const restaurantData = [
+                { name: 'Sukesan Udon', name_jp: '資さんうどん', cuisine: 'Udon', closing: 'Open 24 Hours', address: '2 Chome-1-24 Chiyo, Hakata Ward, Fukuoka', address_jp: '福岡県福岡市博多区千代2丁目1-24', proximity: { tokyu: 25, prezio: 25, hokke: 25 } },
+                { name: 'Ichiran Souhonten (Nakasu)', name_jp: '一蘭 (本社総本店)', cuisine: 'Ramen', closing: 'Open 24 Hours', address: '5 Chome-3-2 Nakasu, Hakata Ward, Fukuoka', address_jp: '福岡県福岡市博多区中洲5丁目3-2', proximity: { tokyu: 18, prezio: 18, hokke: 18 } },
+                { name: 'Nagahama Ramen Menmen', name_jp: '長浜ラーメン めんめん', cuisine: 'Ramen', closing: 'Open 24 Hours', address: '2-1-11 Mitsuki, Hakata-ku, Fukuoka City', address_jp: '福岡市博多区三筑2-1-11', proximity: { tokyu: 18, prezio: 18, hokke: 18 } },
+                { name: '佳人（KAITO）', name_jp: '佳人（KAITO）', cuisine: 'Izakaya', closing: 'Open 24 Hours', address: '5-26 Shimogofukumachi, Hakata Ward, Fukuoka', address_jp: '福岡市博多区下呉服町5-26', proximity: { tokyu: 18, prezio: 18, hokke: 18 } },
+                { name: 'Hakata Taina', name_jp: '博多鯛菜', cuisine: 'Izakaya', closing: '12:00 AM (Midnight)', address: '3 Chome-7-14 Hakata Ekimae, Hakata Ward, Fukuoka', address_jp: '福岡市博多区博多駅前3丁目7-14', proximity: { tokyu: 9, prezio: 11, hokke: 11 } },
+                { name: 'Temujin (KITTE Hakata)', name_jp: 'テムジン (KITTE博多)', cuisine: 'Gyoza', closing: '12:00 AM (Midnight)', address: '9F KITTE Hakata, 9-1 Hakataekichuogai, Hakata Ward, Fukuoka', address_jp: 'ＪＲ博多シティ KITTE博多 9F', proximity: { tokyu: 4, prezio: 7, hokke: 9 } },
+                { name: 'Hakata Issou (Main Store)', name_jp: '博多一双 本店', cuisine: 'Ramen', closing: '12:00 AM (Midnight)', address: '3 Chome-1-11 Hakata Ekimae, Hakata Ward, Fukuoka', address_jp: '福岡県福岡市博多区博多駅前3-1-11', proximity: { tokyu: 10, prezio: 12, hokke: 8 } },
+                { name: 'Ichiran (Canal City)', name_jp: '一蘭 (キャナルシティ博多店)', cuisine: 'Ramen', closing: '11:00 PM', address: 'B1F Canal City Hakata, 1 Chome-2-22 Sumiyoshi, Hakata Ward, Fukuoka', address_jp: '福岡県福岡市博多区住吉1-2-22', proximity: { tokyu: 12, prezio: 10, hokke: 5 } },
+                { name: 'Hakata Station Dining', name_jp: '博多駅構内飲食店街', cuisine: 'Mixed', closing: '10 PM - 11 PM', address: 'Hakata Ekichuogai, Hakata Ward, Fukuoka (Inside Hakata Station)', address_jp: '博多駅中央街（博多駅構内）', proximity: { tokyu: 4, prezio: 7, hokke: 9 } },
+                { name: 'Asahiken Ekimae Honten', name_jp: '旭軒駅前本店', cuisine: 'Gyoza', closing: 'CLOSED on Sunday', address: '2 Chome-15-22 Hakata Ekimae, Hakata Ward, Fukuoka', address_jp: '福岡市博多区博多駅前2丁目15-22', proximity: { tokyu: 0, prezio: 0, hokke: 0 } },
+            ];
+
+            const hotelLocations = {
+                // Keep Romanized for reliable search/origin detection on Maps
+                tokyu: 'Hotel+Tokyu+Rei+Fukuoka+Hakata',
+                prezio: 'Shitetsu+Prezio+Hotel+Hakata',
+                hokke: 'Hotel+Hokke+Club+Fukuoka'
+            };
+
+            const hotelSelect = document.getElementById('hotel-select');
+            const cuisineFiltersContainer = document.getElementById('cuisine-filters');
+            const restaurantList = document.getElementById('restaurant-list');
+            const noResultsDiv = document.getElementById('no-results');
+            const chartCanvas = document.getElementById('proximityChart');
+
+            let proximityChart;
+            
+            const cuisineColors = {
+                'Ramen': '#D97706',
+                'Udon': '#F59E0B',
+                'Gyoza': '#B45309',
+                'Izakaya': '#92400E',
+                'Mixed': '#FBBF24'
+            };
+
+            const state = {
+                selectedHotel: 'tokyu',
+                selectedCuisines: []
+            };
+
+            function getCuisines() {
+                const cuisines = new Set(restaurantData.map(r => r.cuisine));
+                return Array.from(cuisines);
+            }
+
+            function setupCuisineFilters() {
+                const cuisines = getCuisines();
+                cuisineFiltersContainer.innerHTML = cuisines.map(cuisine => `
+                    <div class="flex items-center">
+                        <input id="cuisine-${cuisine.toLowerCase()}" name="cuisine" type="checkbox" value="${cuisine}" class="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500">
+                        <label for="cuisine-${cuisine.toLowerCase()}" class="ml-2 text-sm text-amber-800">${cuisine}</label>
+                    </div>
+                `).join('');
+
+                cuisineFiltersContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                    checkbox.addEventListener('change', () => {
+                        state.selectedCuisines = Array.from(cuisineFiltersContainer.querySelectorAll('input:checked')).map(cb => cb.value);
+                        render();
+                    });
+                });
+            }
+
+            function renderRestaurantList(filteredData) {
+                if (filteredData.length === 0) {
+                    restaurantList.innerHTML = '';
+                    noResultsDiv.classList.remove('hidden');
+                    return;
+                }
+                
+                const origin = hotelLocations[state.selectedHotel];
+
+                noResultsDiv.classList.add('hidden');
+                restaurantList.innerHTML = filteredData.map(r => {
+                    const walkTime = r.proximity[state.selectedHotel];
+                    if (walkTime === 0 && r.closing.toUpperCase() === 'CLOSED ON SUNDAY') return '';
+                    
+                    // Use Japanese name and address for the destination to improve accuracy on Japanese Google Maps
+                    const destination = encodeURIComponent(r.name_jp + ', ' + r.address_jp);
+                    // Creates a Google Maps directions link for WALKING (!3e2)
+                    const mapDirectionsLink = `https://www.google.com/maps/dir/${origin}/${destination}/data=!4m2!4m1!3e2`;
+
+                    return `
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden transform hover:-translate-y-1 transition-transform duration-300">
+                        <div class="p-5">
+                            <!-- Display Japanese Name -->
+                            <h3 class="text-xl font-bold text-amber-800">${r.name_jp}</h3>
+                            <!-- Display Romanized Name for context -->
+                            <p class="text-sm text-amber-600 mt-1 mb-2">(${r.name})</p>
+
+                            <p class="text-sm font-medium bg-amber-100 text-amber-800 rounded-full py-1 px-3 inline-block mt-2">${r.cuisine}</p>
+                            <div class="mt-4 space-y-3 text-amber-700">
+                                <div class="flex items-center">
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                    <span>Sunday Closing: <strong>${r.closing}</strong></span>
+                                </div>
+                                <div class="flex items-start">
+                                      <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                    <!-- Display Japanese Address -->
+                                    <span class="text-sm">${r.address_jp}</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
+                                    <span>Walk Time: <strong>${walkTime} min</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-5 pb-5">
+                             <a href="${mapDirectionsLink}" target="_blank" rel="noopener noreferrer" class="block w-full text-center bg-amber-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-amber-700 transition-colors duration-300">
+                                Get Directions (Walk)
+                            </a>
+                        </div>
+                    </div>
+                    `;
+                }).join('');
+            }
+
+            function initializeChart() {
+                const ctx = chartCanvas.getContext('2d');
+                proximityChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Walking Time (minutes)',
+                            data: [],
+                            backgroundColor: [],
+                            borderColor: [],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        maintainAspectRatio: false,
+                        responsive: true,
+                        scales: {
+                            x: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Minutes to Walk'
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    autoSkip: false,
+                                     font: {
+                                        size: 10
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.dataset.label}: ${context.raw} min`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            function updateChart(filteredData) {
+                const chartData = filteredData
+                    .filter(r => r.proximity[state.selectedHotel] > 0)
+                    .sort((a, b) => a.proximity[state.selectedHotel] - b.proximity[state.selectedHotel]);
+                
+                proximityChart.data.labels = chartData.map(r => r.name_jp); // Use Japanese name for chart labels
+                proximityChart.data.datasets[0].data = chartData.map(r => r.proximity[state.selectedHotel]);
+                proximityChart.data.datasets[0].backgroundColor = chartData.map(r => cuisineColors[r.cuisine] || '#FCD34D');
+                proximityChart.data.datasets[0].borderColor = chartData.map(r => cuisineColors[r.cuisine] ? Chart.helpers.color(cuisineColors[r.cuisine]).darken(0.2).rgbString() : '#FBBF24');
+                proximityChart.update();
+            }
+
+            function render() {
+                const filteredData = restaurantData.filter(r => {
+                    if (r.closing.toUpperCase() === 'CLOSED ON SUNDAY') return false;
+                    if (state.selectedCuisines.length > 0 && !state.selectedCuisines.includes(r.cuisine)) {
+                        return false;
+                    }
+                    return true;
+                });
+
+                renderRestaurantList(filteredData);
+                updateChart(filteredData);
+            }
+
+            hotelSelect.addEventListener('change', (e) => {
+                state.selectedHotel = e.target.value;
+                render();
+            });
+
+            // Initial setup
+            setupCuisineFilters();
+            initializeChart();
+            render();
+        });
+    </script>
+</body>
+</html>
